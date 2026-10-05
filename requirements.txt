@@ -1,0 +1,9 @@
+kurigram==2.2.26
+tgcrypto>=1.2.5
+motor>=3.6
+dnspython>=2.6
+aiohttp>=3.9
+Pillow>=10.3
+fonttools>=4.50
+psutil>=5.9
+python-dotenv>=1.0
