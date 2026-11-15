@@ -18,8 +18,9 @@ setup_logging()
 log = logging.getLogger("AnimeBot")
 
 from Database.mongodata import db  # noqa: E402
-from Plugins import api_handler  # noqa: E402
+from Plugins import api_handler, manhwa_handler, tempfiles  # noqa: E402
 from Plugins.chnl_handler import poller  # noqa: E402
+from Plugins.manhwa_handler import manhwa_poller  # noqa: E402
 from Plugins.UI_design import LINE, fmt_duration, sc  # noqa: E402
 
 
@@ -63,24 +64,26 @@ async def keep_alive():
 
 
 # ------------------------------------------------------------------ startup checks
-async def check_channel(app: Client):
+async def check_channel(app: Client, chat_id=None, label: str = "anime"):
+    chat_id = chat_id if chat_id is not None else config.CHANNEL_ID
     try:
-        chat = await app.get_chat(config.CHANNEL_ID)
-        member = await app.get_chat_member(config.CHANNEL_ID, "me")
+        chat = await app.get_chat(chat_id)
+        member = await app.get_chat_member(chat_id, "me")
         can_post = getattr(getattr(member, "privileges", None), "can_post_messages", None)
-        if member.status != enums.ChatMemberStatus.ADMINISTRATOR and member.status != enums.ChatMemberStatus.OWNER:
+        if member.status not in (enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER):
             raise RuntimeError("the bot is not an admin of the channel")
         if can_post is False:
             raise RuntimeError("the bot is admin but lacks the 'Post messages' permission")
-        log.info("channel OK: %s", chat.title)
+        log.info("%s channel OK: %s", label, chat.title)
     except Exception as e:
-        await alert(app, "Channel check failed", f"{config.CHANNEL_ID}: {e}\nAdd the bot as admin with permission to post.", key="channel-check")
+        await alert(app, f"Channel check failed ({label})", f"{chat_id}: {e}\nAdd the bot as admin with permission to post.", key=f"channel-check:{label}")
 
 
 async def announce_start(app: Client, me):
     note = db.get("restart_notify")
     text = (
         f"❐ <b>{sc('Bot online')}</b>\n{LINE}\n›› @{me.username} · v{config.VERSION}\n"
+        f"›› {sc('Manhwa monitor')} : {sc('on') if manhwa_handler.enabled() else sc('off')}\n"
         f"›› {sc('Posting')} : {sc('paused') if db.get('paused') else sc('active')} · {db.get('interval')}{sc('s')}"
     )
     if note:
@@ -130,7 +133,11 @@ async def main():
     log.info("started as @%s (Kurigram, plugins loaded)", me.username)
 
     await check_channel(app)
+    if manhwa_handler.enabled():
+        await check_channel(app, config.MANHWA_CHANNEL_ID, "manhwa")
+    tmp_task = asyncio.create_task(tempfiles.janitor())
     poller.start(app)
+    manhwa_poller.start(app)
     ka_task = asyncio.create_task(keep_alive()) if (config.KEEP_ALIVE and config.PUBLIC_URL) else None
     await announce_start(app, me)
 
@@ -147,6 +154,9 @@ async def main():
     if ka_task:
         ka_task.cancel()
     await poller.stop()
+    await manhwa_poller.stop()
+    tmp_task.cancel()
+    await asyncio.to_thread(tempfiles.sweep, 0, True)
     await api_handler.close_session()
     await db.close()
     if web_runner:
