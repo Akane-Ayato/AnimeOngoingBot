@@ -6,7 +6,7 @@
 
 <p align="center">
   A fast, owner-controlled Telegram bot that watches the Anikoto API and posts every new ongoing anime
-  episode on your channel — with a glass banner, a styled caption and a Watch Now button that opens your site.
+  episode on your channel, and watches the local-manga API to post every new manhwa chapter on a second channel — each with its own poster design, caption and buttons.
 </p>
 
 <p align="center">
@@ -23,13 +23,16 @@
 - **Automatic posting** — checks the API on a timer, detects new episodes, and posts each one exactly once. Progress is stored in MongoDB, so restarts never cause duplicates.
 - **Smart episode logic** — episode = `max(next_air_ep − 1, is_sub)`; language shows **Dual** when sub and dub are equal, otherwise **Sub | E-Sub**.
 - **Embed verification** — before posting, the bot confirms the episode really has a playable embed on `/series/{id}`, so the Watch Now button never opens an empty page. Not ready yet? It retries next cycle.
-- **Banner maker** — a 16:9 glassmorphism banner built from the API poster: poster card, title, channel logo + name and a short description.
+- **Two poster designs** — anime: white page with red corner bands, genre chips, highlighted description, Watch Now button and a small "Anime Void" credit. Manhwa: red block with a landscape cover card, genre + rating chips, MMWC VOID header. Both are 16:9, built from the API cover.
+- **Manhwa updates** — monitors `b.toonking.xyz/api/local-manga`, posts every new chapter to its own channel with the title and two links (chapter + series) on your manhwa site, and its own buttons via `/m_btn`.
+- **Clean descriptions** — encoded characters repaired, links, markdown and source credits removed before anything goes on a poster or caption.
+- **Storage stays empty** — downloaded covers and rendered posters are temp files deleted after 5 minutes.
 - **Post designer** — replace the default caption with your own template using placeholders (`{title}`, `{episode}`, `{status}` …). The synopsis auto-trims to fit Telegram's caption limit.
 - **Button maker** — add custom button rows under the main button, including popup-alert buttons that need no link.
 - **Custom sticker** — send a sticker after every anime post.
 - **Manual posting** — `/post` one anime or `/batch_post` a whole JSON page, with a Stop button.
 - **Pause / resume / interval** — control the checker from Telegram; every setting lives in MongoDB and survives `/restart`.
-- **Fallbacks everywhere** — API retries with backoff, then your site's own `/api` proxy; banner → default style → text-only post; missing poster uses the background image.
+- **Fallbacks everywhere** — API retries with backoff, then your site's own `/api` proxy; poster → default style → text-only post; missing poster uses the background image.
 - **Error alerts** — crashes, API outages, channel-permission problems and post fallbacks are DM'd to you (throttled) and written to a rotating log file.
 - **Live status** — site, API, database and Telegram latency, posting state, RAM, CPU, storage, uptime and web URL in one message.
 - **Production-ready** — async MongoDB, shared HTTP session, a `/health` endpoint with Render keep-alive, clean shutdown and a self-restart command.
@@ -41,17 +44,18 @@
 |---|---|
 | `/start` | Register and open the start screen (random image + About / Help buttons) |
 | `/help` | Help screen *(owners also see the command list)* |
-| `/pause` | Stop API checking and channel posting *(owner)* |
+| `/pause` | Stop API checking (anime **and** manhwa) *(owner)* |
 | `/resume` | Start checking again, runs a check immediately *(owner)* |
-| `/check` | Run one API check right now *(owner)* |
+| `/check` | Run one check of both APIs right now *(owner)* |
 | `/status` | Site, API, database and bot health *(owner)* |
 | `/logs` | Receive the complete log file *(owner)* |
-| `/post <url> [position]` | Post one anime from any recent-anime JSON page; position starts at 1 *(owner)* |
+| `/post <url> [position]` | Post one anime **or manhwa** from any recent-anime / local-manga JSON page; position starts at 1 *(owner)* |
 | `/batch_post <url> [force]` | Post every anime on that page one by one; already posted ones are skipped unless `force` *(owner)* |
 | `/set_int <seconds>` | Set the API check interval, 30–86400 s *(owner)* |
 | `/post_design` | Set the caption template — reply to a formatted message, or send it next. `reset` / `show` *(owner)* |
 | `/set_sticker` | Set the post sticker — reply to a sticker. `reset` removes it *(owner)* |
-| `/c_btn` | Set custom buttons for every post. `clear` / `show` *(owner)* |
+| `/c_btn` | Custom buttons under every **anime** post. `clear` / `show` *(owner)* |
+| `/m_btn` | Custom buttons under every **manhwa** post (same format as `/c_btn`). `clear` / `show` *(owner)* |
 | `/cancel` | Cancel a pending `/c_btn` or `/post_design` prompt *(owner)* |
 | `/restart` | Restart the bot process; MongoDB settings are untouched *(owner)* |
 
@@ -117,7 +121,19 @@ Set these in `.env` (or as platform environment variables). Never commit real va
 | `RECENT_PAGES` | – | API pages scanned per check (default `2`) |
 | `PER_PAGE` | – | Items per page (default `40`) |
 | `POST_DELAY` | – | Seconds between channel posts (default `5`) |
-| `CHANNEL_NAME` | – | Name drawn on banners (default `Aɳιɱҽ Oɳɠσιɳɠ`) |
+| `MANHWA_CHANNEL_ID` | – | Channel for manhwa posts (`-100…`). Empty = manhwa monitor off. The bot must be admin there |
+| `MANHWA_API` | – | Default `https://b.toonking.xyz/api/local-manga` |
+| `MANHWA_IMG_BASE` | – | Host put in front of relative cover paths (default `https://b.toonking.xyz`) |
+| `MANHWA_SITE` | – | Site used in chapter links (default `https://manhwavoid.space`) |
+| `MANHWA_BRAND` | – | Header text on the manhwa poster (default `MMWC VOID`) |
+| `MANHWA_PAGES` | – | Pages (20 titles each) scanned per check (default `2`) |
+| `MANHWA_MAX_PER_CYCLE` | – | Max manhwa posts per check, the rest wait for the next one (default `20`) |
+| `MANHWA_FORMATS` | – | Only post these formats, e.g. `Manhwa,Manhua` (empty = everything) |
+| `ANIME_CREDIT` | – | Small credit on the anime poster (default `Anime Void`) |
+| `POSTER_SS` | – | Poster supersampling 1–3 (default `2`; use `1` on tiny hosts) |
+| `POSTER_TITLE_FONT` | – | `lilita` (default) or `poppins` |
+| `TMP_TTL` | – | Seconds before temp images are deleted (default `300`) |
+| `CHANNEL_NAME` | – | Channel name used in the Powered-by line (default `Aɳιɱҽ Oɳɠσιɳɠ`) |
 | `POWERED_BY_NAME` / `POWERED_BY_URL` | – | The "Powered By" link in posts |
 | `IMG` | – | Comma separated image URLs; one is picked at random for `/start` and `/help` |
 | `PORT` | – | Health-check web server port (default `8080`; Render sets it) |
@@ -138,12 +154,26 @@ On the very first run the bot only **remembers** the shows that are airing right
 - **VPS** — run under `systemd`, `pm2` or `screen`. `/restart` works under any supervisor.
 - **Local** — `python main.py`. Set `WEB_SERVER=0` if you don't want the health port.
 
+## 📚 How a new manhwa chapter is detected
+
+1. Every interval the bot reads `local-manga` (newest first, 20 titles per page, `MANHWA_PAGES` pages).
+2. Each title's `latestChapter` is compared with the one stored in MongoDB (numeric, so `45.2` → `45.3` works).
+3. A higher chapter, or a title the bot has never seen, is posted; a chapter number that goes *down* is remembered silently.
+4. The post is a poster plus:
+
+```
+» Chapter 45 Updated      → https://manhwavoid.space/title/{slug}/chapter/{latestChapter}
+» Read Here               → https://manhwavoid.space/title/{slug}
+```
+
+On the first run the bot only remembers the current titles. All formats and adult titles are posted unless you set `MANHWA_FORMATS`.
+
 ## 🔄 How a new episode is detected
 
 1. The poller reads `/recent-anime` (sorted by `updated_at`, newest first) every interval.
 2. Each show's episode number is compared with the last one stored in MongoDB.
 3. A higher number triggers verification: `/series/{id}` must list that episode with an embed.
-4. The banner, caption and buttons are built and posted, then the sticker (if set) follows.
+4. The poster, caption and buttons are built and posted, then the sticker (if set) follows.
 5. The new episode number is saved, so the same episode is never posted twice.
 
 Unknown shows are posted only when *Currently Airing*; unknown finished shows are recorded silently so old titles with metadata edits don't spam the channel.
@@ -163,15 +193,22 @@ Unknown shows are posted only when *Currently Airing*; unknown finished shows ar
 │   ├── start.py                 # /start, /help
 │   ├── settings.py              # pause, resume, set_int, sticker, post_design, status, restart
 │   ├── chnl_handler.py          # posting engine, poller, /check, /post, /batch_post
-│   ├── api_handler.py           # API fetching, retries, episode logic, health checks
-│   ├── postmaker.py             # caption values + Pillow banner
+│   ├── manhwa_handler.py        # manhwa poller + posting engine
+│   ├── api_handler.py           # anime + manhwa API fetching, retries, episode logic, health checks
+│   ├── postmaker.py             # captions, image download, poster rendering
+│   ├── poster_kit.py            # shared poster drawing toolkit
+│   ├── poster_anime.py          # anime poster design
+│   ├── poster_manhwa.py         # manhwa poster design
+│   ├── textclean.py             # description / synopsis cleaner
+│   ├── tempfiles.py             # temp files + 5-minute auto-delete
+│   ├── tg_utils.py              # FloodWait helper
 │   ├── UI_design.py             # small caps, default style, all bot texts
 │   ├── buttonhandler.py         # button parser/builder, /c_btn, prompt capture
 │   ├── callbacks.py             # inline button callbacks
 │   └── logger_error_handler.py  # logging, error alerts, /logs
 └── assets/
     ├── logo.jpg
-    └── fonts/                   # Unbounded Bold, Inter Regular/SemiBold (OFL)
+    └── fonts/                   # Poppins Bold/Medium, Lilita One (OFL)
 ```
 
 ## 🗄 Data Stored in MongoDB
@@ -180,7 +217,8 @@ Unknown shows are posted only when *Currently Airing*; unknown finished shows ar
 |---|---|
 | `users` | Everyone who pressed `/start` |
 | `posted` | Last posted episode per anime — the duplicate-protection memory |
-| `settings` | Paused state, interval, post style, sticker, custom buttons, seeding flag |
+| `manhwa` | Last posted chapter per manhwa slug |
+| `settings` | Paused state, interval, post style, sticker, `/c_btn` and `/m_btn` buttons, seeding flags |
 
 ## 🧰 Troubleshooting
 
@@ -188,7 +226,9 @@ Unknown shows are posted only when *Currently Airing*; unknown finished shows ar
 |---|---|
 | `USER_NOT_PARTICIPANT` / "Channel check failed" at startup | Add the bot to the channel as admin with *Post messages* |
 | No error alerts arrive | Press `/start` on the bot once from your owner account |
-| Posts appear without a banner | Check `/logs` — the poster could not be downloaded, so the text-only fallback was used |
+| Posts appear without a poster | Check `/logs` — the cover could not be downloaded, so the text-only fallback was used |
+| Manhwa covers fail to download | Set `MANHWA_IMG_BASE` to the host that serves `/uploads/covers/…` |
+| Manhwa posts never appear | `MANHWA_CHANNEL_ID` must be set and the bot must be admin of that channel |
 | Nothing posts after a restart | Check `/status` — posting may be paused; use `/resume` |
 
 ## ⚠️ Security
