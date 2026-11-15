@@ -2,6 +2,7 @@
 MongoDB layer (motor). Collections:
   users    - everyone who pressed /start
   posted   - one doc per anime: last posted episode (the dedupe memory)
+  manhwa   - one doc per manhwa slug: last posted chapter (the manhwa dedupe memory)
   settings - single document with every runtime setting (survives /restart)
 """
 import time
@@ -19,6 +20,10 @@ DEFAULT_SETTINGS = {
     "c_btn_raw": None,        # raw text the owner sent for /c_btn (for display / editing)
     "c_btn_rows": [],         # parsed rows: [[{"text":..., "url":...} | {"text":..., "alert":key}]]
     "btn_alerts": {},         # popup texts keyed by short hash
+    "m_btn_raw": None,        # raw text for /m_btn (manhwa channel buttons)
+    "m_btn_rows": [],         # parsed rows for the manhwa channel
+    "m_btn_alerts": {},       # popup texts for the manhwa buttons
+    "manhwa_seeded": False,   # first-run seeding of the manhwa monitor finished
     "seeded": False,          # first-run seeding finished
     "restart_notify": None,   # {"chat_id":..., "message_id":...} edited after /restart
 }
@@ -30,6 +35,7 @@ class Database:
         self.db = None
         self.users = None
         self.posted = None
+        self.manhwa = None
         self.settings = None
         self._cache: dict = {}
 
@@ -38,9 +44,11 @@ class Database:
         self.db = self.client[config.DB_NAME]
         self.users = self.db["users"]
         self.posted = self.db["posted"]
+        self.manhwa = self.db["manhwa"]
         self.settings = self.db["settings"]
         await self.client.admin.command("ping")
         await self.posted.create_index("updated_at")
+        await self.manhwa.create_index("updated_at")
         doc = await self.settings.find_one({"_id": "config"}) or {}
         self._cache = {**DEFAULT_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}}
         # make sure every default key exists in the DB document
@@ -103,6 +111,24 @@ class Database:
 
     async def count_known(self) -> int:
         return await self.posted.count_documents({})
+
+    # ---- manhwa memory ----
+    async def get_manhwa(self, slug) -> Optional[dict]:
+        return await self.manhwa.find_one({"_id": str(slug)})
+
+    async def set_manhwa(self, slug, chapter: str, num: Optional[float], title: str,
+                         message_id: Optional[int] = None, silent: bool = False):
+        data = {"last_chapter": chapter, "last_num": num, "title": title, "updated_at": int(time.time())}
+        if message_id:
+            data["message_id"] = message_id
+        data["silent"] = bool(silent)
+        await self.manhwa.update_one({"_id": str(slug)}, {"$set": data}, upsert=True)
+
+    async def count_manhwa_posted(self) -> int:
+        return await self.manhwa.count_documents({"silent": False})
+
+    async def count_manhwa_known(self) -> int:
+        return await self.manhwa.count_documents({})
 
 
 db = Database()
