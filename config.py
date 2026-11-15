@@ -10,7 +10,7 @@ from pyrogram import filters
 
 load_dotenv()
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 START_TIME = time.time()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -65,6 +65,23 @@ MIN_INTERVAL = 30
 RECENT_PAGES = max(1, _int("RECENT_PAGES", 2))  # pages of /recent-anime scanned per check
 PER_PAGE = max(1, _int("PER_PAGE", 40))
 POST_DELAY = max(1, _int("POST_DELAY", 5))  # seconds between channel posts
+
+# ---- Manhwa monitor (optional: leave MANHWA_CHANNEL_ID empty to disable it) ----
+MANHWA_CHANNEL_ID = _chat(os.environ["MANHWA_CHANNEL_ID"]) if os.getenv("MANHWA_CHANNEL_ID", "").strip() else None
+MANHWA_API = os.getenv("MANHWA_API", "https://b.toonking.xyz/api/local-manga").strip()
+MANHWA_IMG_BASE = os.getenv("MANHWA_IMG_BASE", "https://b.toonking.xyz").rstrip("/")   # covers are relative paths
+MANHWA_SITE = os.getenv("MANHWA_SITE", "https://manhwavoid.space").rstrip("/")
+MANHWA_BRAND = os.getenv("MANHWA_BRAND", "MMWC VOID")      # header text on the manhwa poster
+ANIME_CREDIT = os.getenv("ANIME_CREDIT", "Anime Void")     # small credit on the anime poster
+MANHWA_PAGES = max(1, _int("MANHWA_PAGES", 2))             # API pages (20 items each) scanned per check
+MANHWA_MAX_PER_CYCLE = max(1, _int("MANHWA_MAX_PER_CYCLE", 20))
+# Only post these formats (comma separated, e.g. "Manhwa,Manhua"). Empty = everything the API returns.
+MANHWA_FORMATS = {x.strip().lower() for x in os.getenv("MANHWA_FORMATS", "").split(",") if x.strip()}
+
+# ---- Posters / temp files ----
+POSTER_SS = max(1, min(3, _int("POSTER_SS", 2)))   # supersampling: 2 = crisp, 1 = half the RAM
+TMP_DIR = os.path.join(BASE_DIR, "tmp")
+TMP_TTL = max(30, _int("TMP_TTL", 300))             # downloaded covers + rendered posters are deleted after this many seconds
 
 # ---- Branding ----
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "Aɳιɱҽ Oɳɠσιɳɠ")
