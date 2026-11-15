@@ -27,11 +27,19 @@ services:
         sync: false
       - key: IMG
         sync: false
+      - key: MANHWA_CHANNEL_ID
+        sync: false
       - key: SITE_URL
         value: https://ani-void-tv.vercel.app
       - key: API_BASE
         value: https://anikotoapi.site
       - key: DEFAULT_INTERVAL
         value: "300"
+      - key: MANHWA_API
+        value: https://b.toonking.xyz/api/local-manga
+      - key: MANHWA_SITE
+        value: https://manhwavoid.space
+      - key: POSTER_SS
+        value: "1"
       - key: KEEP_ALIVE
         value: "1"
